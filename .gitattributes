@@ -1,0 +1,15 @@
+# 统一行尾：仓库内一律 LF（目标平台是 Linux）
+* text=auto eol=lf
+
+# 补丁必须原样字节，不做行尾转换
+*.patch -text
+*.diff  -text
+
+# 二进制/生成物
+*.png binary
+*.jpg binary
+*.gif binary
+
+# Windows 下需要的脚本保留 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf

@@ -1,0 +1,14 @@
+[Unit]
+Description=WS2812 LED ring daemon (xiaozhi voice control backend)
+After=systemd-modules-load.service local-fs.target
+Before=xiaozhi-mcp-led.service
+
+[Service]
+Type=simple
+ExecStartPre=/usr/local/bin/ws2812_wait_dev.sh
+ExecStart=/usr/bin/python3 /usr/local/bin/ws2812d.py --count 24
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

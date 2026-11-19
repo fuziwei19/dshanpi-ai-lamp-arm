@@ -1,0 +1,25 @@
+[Unit]
+Description=Vision greeting (arrival greet / wave goodbye / auto power-save)
+Documentation=file:///root/vision_interact.py
+After=local-fs.target
+# 与「人脸跟随」互斥：两者都独占机械臂 /dev/ttyACM0 与摄像头。
+# 启动本单元时 systemd 会先停掉 face-follow；因为 face-follow 的 KillSignal=SIGINT，
+# 它会先优雅归位再退出，不会把手臂丢在半路。
+Conflicts=face-follow.service
+# 不 enable、无 [Install] 段 -> 绝不开机自启（它会自己动机械臂，必须由人主动触发）
+StartLimitIntervalSec=0
+
+[Service]
+Type=exec
+WorkingDirectory=/root
+Environment=PYTHONUNBUFFERED=1
+Environment=OPENCV_LOG_LEVEL=ERROR
+ExecStartPre=/root/greet_precheck.sh
+ExecStart=/root/miniconda3/envs/lerobot/bin/python /root/greet_launch.py
+# SIGINT = 终端 Ctrl+C -> 迎宾程序会走「回收纳位 + 释放力矩」的优雅收尾
+KillSignal=SIGINT
+KillMode=mixed
+TimeoutStopSec=40
+Restart=no
+StandardOutput=append:/var/log/xiaozhi-linux/vision_greet.log
+StandardError=append:/var/log/xiaozhi-linux/vision_greet.log

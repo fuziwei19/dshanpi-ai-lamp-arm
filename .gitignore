@@ -1,0 +1,57 @@
+# 构建产物
+.build/
+dist/
+build/
+*.o
+*.a
+*.so
+*.elf
+*.bin
+*.ko
+*.mod
+*.mod.c
+*.cmd
+*.map
+
+# 设备授权 / 运行时数据
+tuyadb/
+*.log
+logs/
+*.jsonl
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 备份文件
+*.bak
+*.bak-*
+*.orig
+*.orig_*
+*.pre*
+*.preex
+*.prefeishu
+*.prelocal
+*.prevemo
+
+# 模型权重（体积大，按 README 自行下载）
+*.onnx
+*.task
+*.rknn
+*.mnn
+*.pt
+*.pth
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 敏感配置（只保留 .example）
+config/feishu.json
+**/feishu.json
+!config/feishu.json.example

@@ -1,0 +1,50 @@
+ M apps/tuya.ai/your_chat_bot/CMakeLists.txt
+ M apps/tuya.ai/your_chat_bot/app_default.config
+ M apps/tuya.ai/your_chat_bot/config/DshanPi_A1.config
+ M apps/tuya.ai/your_chat_bot/include/tuya_config.h
+ M apps/tuya.ai/your_chat_bot/src/app_chat_bot.c
+ M apps/tuya.ai/your_chat_bot/src/tuya_main.c
+ M boards/LINUX/DshanPi_A1/board_com_api.c
+ M boards/LINUX/DshanPi_A1/tdd_button_keyboard.c
+ M boards/LINUX/DshanPi_A1/tdd_button_keyboard.h
+ M src/ai_components/ai_mode/src/ai_mode_free.c
+ M src/peripherals/audio_codecs/tdd_audio/src/tdd_audio_alsa.c
+?? apps/tuya.ai/your_chat_bot/CMakeLists.txt.prefeishu
+?? apps/tuya.ai/your_chat_bot/app_default.config.orig
+?? apps/tuya.ai/your_chat_bot/config/DshanPi_A1.config.orig
+?? apps/tuya.ai/your_chat_bot/im/
+?? apps/tuya.ai/your_chat_bot/include/app_camera.h
+?? apps/tuya.ai/your_chat_bot/include/app_emo_lamp.h
+?? apps/tuya.ai/your_chat_bot/include/app_feishu.h
+?? apps/tuya.ai/your_chat_bot/include/app_local_ctl.h
+?? apps/tuya.ai/your_chat_bot/include/app_mcp_tools.h
+?? apps/tuya.ai/your_chat_bot/include/app_vision.h
+?? apps/tuya.ai/your_chat_bot/run_chatbot.sh
+?? apps/tuya.ai/your_chat_bot/run_chatbot.sh.bak
+?? apps/tuya.ai/your_chat_bot/src/app_camera.c
+?? apps/tuya.ai/your_chat_bot/src/app_chat_bot.c.bak-free120
+?? apps/tuya.ai/your_chat_bot/src/app_chat_bot.c.bak-free120kv
+?? apps/tuya.ai/your_chat_bot/src/app_chat_bot.c.preex
+?? apps/tuya.ai/your_chat_bot/src/app_chat_bot.c.prefeishu
+?? apps/tuya.ai/your_chat_bot/src/app_chat_bot.c.prelocal
+?? apps/tuya.ai/your_chat_bot/src/app_chat_bot.c.prevemo
+?? apps/tuya.ai/your_chat_bot/src/app_emo_lamp.c
+?? apps/tuya.ai/your_chat_bot/src/app_feishu.c
+?? apps/tuya.ai/your_chat_bot/src/app_local_ctl.c
+?? apps/tuya.ai/your_chat_bot/src/app_local_ctl.c.prefeishu
+?? apps/tuya.ai/your_chat_bot/src/app_mcp_tools.c
+?? apps/tuya.ai/your_chat_bot/src/app_mcp_tools.c.prephotoimg
+?? apps/tuya.ai/your_chat_bot/src/app_mcp_tools.c.prevemo
+?? apps/tuya.ai/your_chat_bot/src/app_vision.c
+?? apps/tuya.ai/your_chat_bot/src/app_vision.c.bak
+?? apps/tuya.ai/your_chat_bot/src/tuya_main.c.orig
+?? apps/tuya.ai/your_chat_bot/src/tuya_main.c.orig_1014_0939
+?? boards/LINUX/DshanPi_A1/board_com_api.c.orig
+?? boards/LINUX/DshanPi_A1/tdd_button_keyboard.c.orig
+?? boards/LINUX/DshanPi_A1/tdd_button_keyboard.h.orig
+?? src/ai_components/ai_mode/src/ai_mode_free.c.bak-free120
+?? src/ai_components/ai_mode/src/ai_mode_free.c.bak-noselftalk
+?? src/peripherals/audio_codecs/tdd_audio/src/tdd_audio_alsa.c.bak
+?? src/peripherals/audio_codecs/tdd_audio/src/tdd_audio_alsa.c.predbg
+?? src/peripherals/audio_codecs/tdd_audio/src/tdd_audio_alsa.c.prepcap
+TuyaOpen HEAD: ec8aa7cb 2026-10-13

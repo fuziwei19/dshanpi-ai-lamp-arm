@@ -1,0 +1,10 @@
+{
+  "_comment": "手势 -> 动作 映射。改这个文件重启迎宾服务即可生效，不用改代码。可用动作: none / follow / stop_follow / nod / shake_head / wave / look_up / back / pan_wiggle / gripper_wiggle / greet / photo。可用手势: palm / ok / fist / point / unknown",
+  "_hint_fist": "握拳最容易被误检（手部模型对握拳外形很敏感），所以默认给 none；想用可以改成 back（结束跟随）",
+  "_hint_point": "伸出 1 指；想用可以改成 look_up（抬头）或 photo（拍一张）",
+  "palm": "follow",
+  "ok": "nod",
+  "fist": "none",
+  "point": "none",
+  "unknown": "none"
+}

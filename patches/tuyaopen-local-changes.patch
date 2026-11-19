@@ -1,0 +1,520 @@
+diff --git a/boards/LINUX/DshanPi_A1/board_com_api.c b/boards/LINUX/DshanPi_A1/board_com_api.c
+index ff4555eb..dad8c0c1 100644
+--- a/boards/LINUX/DshanPi_A1/board_com_api.c
++++ b/boards/LINUX/DshanPi_A1/board_com_api.c
+@@ -146,7 +146,10 @@ static OPERATE_RET __board_register_button(void)
+     #if defined(BUTTON_NAME)
+     BUTTON_CFG_T btn_cfg = {0};
+     btn_cfg.mode = BUTTON_TIMER_SCAN_MODE;
+-    rt = tdd_keyboard_button_register(BUTTON_NAME, &btn_cfg);
++    btn_cfg.key_char = BUTTON_NAME[0];
++    /* Device name MUST match AI_CHAT_BUTTON_NAME used by ai_chat_main.c,
++     * the key to press comes from BUTTON_NAME (Kconfig). */
++    rt = tdd_keyboard_button_register("ai_chat_button", &btn_cfg);
+     if (OPRT_OK != rt) {
+         PR_ERR("Failed to register keyboard button handler: %d", rt);
+         return rt;
+diff --git a/boards/LINUX/DshanPi_A1/tdd_button_keyboard.c b/boards/LINUX/DshanPi_A1/tdd_button_keyboard.c
+index 8307349d..79a0b777 100644
+--- a/boards/LINUX/DshanPi_A1/tdd_button_keyboard.c
++++ b/boards/LINUX/DshanPi_A1/tdd_button_keyboard.c
+@@ -26,6 +26,7 @@
+ ***********************************************************/
+ typedef struct {
+     char name[BUTTON_NAME_LEN];
++    char key_char;  // uppercase key character to match
+     BUTTON_CFG_T cfg;
+     struct termios orig_termios;
+     int termios_saved;
+@@ -71,6 +72,9 @@ static OPERATE_RET __add_new_button(char *name, BUTTON_CFG_T *data, DEVICE_BUTTO
+     memcpy(&p_ctx->cfg, data, sizeof(BUTTON_CFG_T));
+     strncpy(p_ctx->name, name, BUTTON_NAME_LEN - 1);
+     p_ctx->name[BUTTON_NAME_LEN - 1] = '\0';
++    // Store key_char in uppercase; fall back to name[0] if not set
++    char kc = data->key_char ? data->key_char : name[0];
++    p_ctx->key_char = (kc >= 'a' && kc <= 'z') ? kc - 'a' + 'A' : kc;
+     p_ctx->termios_saved = 0;
+     p_ctx->key_pressed = 0;
+     p_ctx->last_press_time = 0;
+@@ -165,11 +169,8 @@ static OPERATE_RET __tdd_button_read_value(TDL_BUTTON_OPRT_INFO *dev, uint8_t *v
+         return OPRT_INVALID_PARM;
+     }
+ 
+-    // Get the first character of name, convert to uppercase if it's a lowercase letter
+-    name_upper = p_ctx->name[0];
+-    if (name_upper >= 'a' && name_upper <= 'z') {
+-        name_upper = name_upper - 'a' + 'A';
+-    }
++    // Get the target key character (already stored in uppercase)
++    name_upper = p_ctx->key_char;
+ 
+     // Get current time (milliseconds)
+     current_time = tal_system_get_millisecond();
+diff --git a/boards/LINUX/DshanPi_A1/tdd_button_keyboard.h b/boards/LINUX/DshanPi_A1/tdd_button_keyboard.h
+index c568ccbb..62578a4a 100644
+--- a/boards/LINUX/DshanPi_A1/tdd_button_keyboard.h
++++ b/boards/LINUX/DshanPi_A1/tdd_button_keyboard.h
+@@ -25,6 +25,7 @@ extern "C" {
+ ***********************************************************/
+ typedef struct {
+     TDL_BUTTON_MODE_E mode;
++    char key_char;  // keyboard character for this button; 0 = use name[0]
+ } BUTTON_CFG_T;
+ 
+ /***********************************************************
+diff --git a/src/ai_components/ai_mode/src/ai_mode_free.c b/src/ai_components/ai_mode/src/ai_mode_free.c
+index 26712846..78d8ea69 100755
+--- a/src/ai_components/ai_mode/src/ai_mode_free.c
++++ b/src/ai_components/ai_mode/src/ai_mode_free.c
+@@ -36,7 +36,11 @@ do { \
+     _old = _new; \
+ }while (0)
+ 
+-#define AI_CHAT_WAKEUP_TIME_MS     (30 * 1000)      // 30sec
++/* [PATCH-11-03-FREE120] 免唤醒连续对话窗口 30s -> 120s
++   唤醒一次后 2 分钟内可连续提问；每说完一轮重置计时；
++   连续 120s 没语音才回 IDLE（需要重新唤醒）。
++   ⚠️ TuyaOpen 源码补丁，tos.py update 可能覆盖，覆盖后要重新打 */
++#define AI_CHAT_WAKEUP_TIME_MS     (120 * 1000)     // 120sec, [PATCH-11-03-FREE120]
+ 
+ /***********************************************************
+ ***********************typedef define***********************
+@@ -134,6 +138,14 @@ static void __ai_mode_enter_speak(void)
+ #endif
+ 
+     tal_sw_timer_stop(sg_enter_idle_timer);
++
++    /* [PATCH-11-04-NOSELFTALK] 播报期间关麦。
++       FREE 模式下 wakeup_flag 在 THINK/SPEAK 全程为 true，麦克风持续切片上传，
++       喇叭声音被回采后云端 ASR 会把自家 TTS 当成用户说话 -> 自问自答。
++       这里临时关掉采集，播报结束回到 LISTEN 时由 __ai_mode_enter_listen()
++       里的 ai_audio_input_wakeup_set(true) 自动恢复。 */
++    ai_audio_input_wakeup_set(false);
++    PR_DEBUG("[====ai_free] enter speak -> mic muted");
+ }
+ 
+ static void __ai_mode_enter_idle_time_cb(TIMER_ID timer_id, void *arg)
+@@ -294,6 +306,12 @@ static OPERATE_RET __ai_mode_free_vad_change(AI_AUDIO_VAD_STATE_E vad_flag)
+     PR_DEBUG("[====ai_free] vad: [%d]", vad_flag); 
+ 
+     if (AI_AUDIO_VAD_START == vad_flag) {
++        /* [PATCH-11-04-NOSELFTALK] 正在放音时忽略 VAD：SPEAK 状态的切换是任务轮询
++           驱动的，存在几十毫秒延迟，这里兜住那段时间里的回采。 */
++        if (ai_audio_player_is_playing()) {
++            PR_DEBUG("[====ai_free] vad start ignored (player is playing)");
++            return OPRT_OK;
++        }
+         tuya_ai_agent_set_scode(AI_AGENT_SCODE_DEFAULT);
+         tuya_ai_input_start(false);
+     } else {
+diff --git a/src/peripherals/audio_codecs/tdd_audio/src/tdd_audio_alsa.c b/src/peripherals/audio_codecs/tdd_audio/src/tdd_audio_alsa.c
+index 9ae22ace..211b8660 100644
+--- a/src/peripherals/audio_codecs/tdd_audio/src/tdd_audio_alsa.c
++++ b/src/peripherals/audio_codecs/tdd_audio/src/tdd_audio_alsa.c
+@@ -29,6 +29,10 @@
+ 
+ #include <alsa/asoundlib.h>
+ #include <pthread.h>
++#include <errno.h>
++#include <string.h>
++#include <stdio.h>
++#include <stdlib.h>
+ 
+ #include "tal_log.h"
+ #include "tal_memory.h"
+@@ -41,6 +45,20 @@
+ ***********************************************************/
+ #define AUDIO_PCM_FRAME_MS       10
+ 
++/* RK3576 SAI TX is hard-wired to 2 slots per LRCK frame: opening the playback
++ * stream as MONO makes the SAI drop every sample (silence) and doubles the
++ * frame accounting. Playback is always opened as STEREO and the mono stream is
++ * duplicated (mono -> L/R) inside __tdd_audio_alsa_play(). */
++#define ALSA_PLAYBACK_CHANNELS   (2)
++
++/* RK3576 SAI2 shares ONE slot clock between TX and RX: if the two streams ask
++ * for a DIFFERENT slot count (mono capture + stereo playback) the RX frame
++ * accounting doubles and the whole capture runs at 2x speed (measured 32006 Hz
++ * for a nominal 16000 Hz stream), which silently breaks ASR/KWS/VAD tuning.
++ * Measured on this board: 1ch/1ch and 2ch/2ch are 1.000x, mixed is not.
++ * -> capture is opened as STEREO as well and downmixed to mono below. */
++#define ALSA_CAPTURE_CHANNELS    (2)
++
+ #define ALSA_CAPTURE_THREAD_STACK_SIZE (4096)
+ #define ALSA_CAPTURE_THREAD_PRIORITY   (THREAD_PRIO_2)
+ 
+@@ -73,10 +91,18 @@ typedef struct {
+     uint8_t *capture_buffer;
+     uint32_t capture_buffer_size;
+ 
++    // Downmixed MONO capture handed to mic_cb / VAD / KWS / AEC
++    uint8_t *capture_mono_buffer;
++    uint32_t capture_mono_size;
++
+     uint8_t *ref_buffer;
+     uint32_t ref_buffer_size;
+     uint8_t *out_buffer;
+     uint32_t out_buffer_size;
++
++    // Mono -> stereo conversion scratch buffer used for playback
++    uint8_t *play_conv_buffer;
++    uint32_t play_conv_buffer_size;
+ } TDD_AUDIO_ALSA_HANDLE_T;
+ 
+ /***********************************************************
+@@ -99,6 +125,26 @@ void tdd_audio_alsa_unregister_kws_feed_cb(void);
+ static TDD_AUDIO_AFE_FEED_CB __s_vad_feed_cb = NULL;
+ static TDD_AUDIO_AFE_FEED_CB __s_kws_feed_cb = NULL;
+ 
++/* Opt-in debug dump: TDD_ALSA_DUMP=1 dumps what the mic actually delivers
++ * (mono, 16 kbit/s16) and what is written to the speaker, so the capture rate
++ * and content can be verified objectively.  Disabled entirely by default. */
++static int   __s_dump_state = -1;   /* -1 unknown, 0 off, 1 on */
++static FILE *__s_dump_cap = NULL;
++static FILE *__s_dump_pb = NULL;
++
++static void __alsa_dump_init(void)
++{
++    if (__s_dump_state >= 0) {
++        return;
++    }
++    __s_dump_state = (getenv("TDD_ALSA_DUMP") != NULL) ? 1 : 0;
++    if (__s_dump_state) {
++        __s_dump_cap = fopen("/tmp/tdd_cap.raw", "wb");
++        __s_dump_pb = fopen("/tmp/tdd_pb.raw", "wb");
++        PR_WARN("TDD_ALSA_DUMP on -> /tmp/tdd_cap.raw (mic mono) /tmp/tdd_pb.raw");
++    }
++}
++
+ /***********************************************************
+ ***********************function define**********************
+ ***********************************************************/
+@@ -148,7 +194,7 @@ static OPERATE_RET __alsa_setup_capture(TDD_AUDIO_ALSA_HANDLE_T *hdl)
+     // Set parameters
+     snd_pcm_hw_params_set_access(hdl->capture_handle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED);
+     snd_pcm_hw_params_set_format(hdl->capture_handle, hw_params, __get_alsa_format(hdl->cfg.data_bits));
+-    snd_pcm_hw_params_set_channels(hdl->capture_handle, hw_params, hdl->cfg.channels);
++    snd_pcm_hw_params_set_channels(hdl->capture_handle, hw_params, ALSA_CAPTURE_CHANNELS);
+     snd_pcm_hw_params_set_rate_near(hdl->capture_handle, hw_params, (unsigned int *)&hdl->cfg.sample_rate, 0);
+ 
+     // Set buffer and period sizes
+@@ -165,6 +211,15 @@ static OPERATE_RET __alsa_setup_capture(TDD_AUDIO_ALSA_HANDLE_T *hdl)
+         hdl->capture_handle = NULL;
+         return OPRT_COM_ERROR;
+     }
++    {
++        snd_pcm_uframes_t __ps = 0, __bs = 0;
++        int __dir = 0;
++        if (snd_pcm_hw_params_get_period_size(hw_params, &__ps, &__dir) == 0 &&
++            snd_pcm_hw_params_get_buffer_size(hw_params, &__bs) == 0) {
++            PR_INFO("ALSA capture ACTUAL period=%lu frames, buffer=%lu frames (cfg period=%u)",
++                    (unsigned long)__ps, (unsigned long)__bs, (unsigned)hdl->cfg.period_frames);
++        }
++    }
+ 
+     // Prepare the device
+     err = snd_pcm_prepare(hdl->capture_handle);
+@@ -176,9 +231,12 @@ static OPERATE_RET __alsa_setup_capture(TDD_AUDIO_ALSA_HANDLE_T *hdl)
+     }
+ 
+     // Calculate buffer size
+-    hdl->capture_buffer_size = hdl->cfg.period_frames * hdl->cfg.channels * (hdl->cfg.data_bits / 8);
+-    hdl->ref_buffer_size = hdl->capture_buffer_size;
+-    hdl->out_buffer_size = hdl->capture_buffer_size;
++    /* capture_buffer holds the RAW hardware frames (ALSA_CAPTURE_CHANNELS wide) */
++    hdl->capture_buffer_size = hdl->cfg.period_frames * ALSA_CAPTURE_CHANNELS * (hdl->cfg.data_bits / 8);
++    /* mic_cb / VAD / KWS / AEC all consume MONO frames */
++    hdl->capture_mono_size = hdl->cfg.period_frames * hdl->cfg.channels * (hdl->cfg.data_bits / 8);
++    hdl->ref_buffer_size = hdl->capture_mono_size;
++    hdl->out_buffer_size = hdl->capture_mono_size;
+     hdl->ref_buffer = (uint8_t *)tal_malloc(hdl->ref_buffer_size);
+     if (NULL == hdl->ref_buffer) {
+         PR_ERR("Cannot allocate reference buffer");
+@@ -222,8 +280,25 @@ static OPERATE_RET __alsa_setup_capture(TDD_AUDIO_ALSA_HANDLE_T *hdl)
+         return OPRT_MALLOC_FAILED;
+     }
+ 
+-    PR_INFO("ALSA capture device setup: %s, rate=%d, channels=%d, bits=%d", hdl->cfg.capture_device,
+-            hdl->cfg.sample_rate, hdl->cfg.channels, hdl->cfg.data_bits);
++    hdl->capture_mono_buffer = (uint8_t *)tal_malloc(hdl->capture_mono_size);
++    if (NULL == hdl->capture_mono_buffer) {
++        PR_ERR("Cannot allocate capture mono buffer");
++        tal_free(hdl->capture_buffer);
++        hdl->capture_buffer = NULL;
++        tal_free(hdl->out_buffer);
++        hdl->out_buffer = NULL;
++        pthread_mutex_destroy(&hdl->ref_buffer_mutex);
++        tal_free(hdl->ref_buffer);
++        hdl->ref_buffer = NULL;
++        snd_pcm_close(hdl->capture_handle);
++        hdl->capture_handle = NULL;
++        return OPRT_MALLOC_FAILED;
++    }
++    memset(hdl->capture_mono_buffer, 0, hdl->capture_mono_size);
++
++    PR_INFO("ALSA capture device setup: %s, rate=%d, hw_channels=%d, pipeline_channels=%d, bits=%d",
++            hdl->cfg.capture_device, hdl->cfg.sample_rate, ALSA_CAPTURE_CHANNELS,
++            hdl->cfg.channels, hdl->cfg.data_bits);
+ 
+     return OPRT_OK;
+ }
+@@ -254,7 +329,7 @@ static OPERATE_RET __alsa_setup_playback(TDD_AUDIO_ALSA_HANDLE_T *hdl)
+     // Set parameters
+     snd_pcm_hw_params_set_access(hdl->playback_handle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED);
+     snd_pcm_hw_params_set_format(hdl->playback_handle, hw_params, __get_alsa_format(hdl->cfg.data_bits));
+-    snd_pcm_hw_params_set_channels(hdl->playback_handle, hw_params, hdl->cfg.channels);
++    snd_pcm_hw_params_set_channels(hdl->playback_handle, hw_params, ALSA_PLAYBACK_CHANNELS);
+     snd_pcm_hw_params_set_rate_near(hdl->playback_handle, hw_params, (unsigned int *)&hdl->cfg.spk_sample_rate, 0);
+ 
+     // Set buffer and period sizes
+@@ -282,7 +357,7 @@ static OPERATE_RET __alsa_setup_playback(TDD_AUDIO_ALSA_HANDLE_T *hdl)
+     }
+ 
+     PR_INFO("ALSA playback device setup: %s, rate=%d, channels=%d, bits=%d", hdl->cfg.playback_device,
+-            hdl->cfg.spk_sample_rate, hdl->cfg.channels, hdl->cfg.data_bits);
++            hdl->cfg.spk_sample_rate, ALSA_PLAYBACK_CHANNELS, hdl->cfg.data_bits);
+ 
+     return OPRT_OK;
+ }
+@@ -331,18 +406,29 @@ static OPERATE_RET __alsa_setup_mixer(TDD_AUDIO_ALSA_HANDLE_T *hdl)
+         return OPRT_OK; // Non-critical error
+     }
+ 
+-    // Find mixer element
+-    snd_mixer_selem_id_t *sid;
+-    snd_mixer_selem_id_alloca(&sid);
+-    snd_mixer_selem_id_set_index(sid, 0);
+-    snd_mixer_selem_id_set_name(sid, selem_name);
+-    hdl->mixer_elem = snd_mixer_find_selem(hdl->mixer_handle, sid);
++    // Find a usable mixer element. Many boards (DshanPi A1 / ES8388) expose no
++    // "Master" control at all, so walk a candidate list and take the first one
++    // that actually has a playback volume.
++    static const char *cand[] = { "Master", "PCM", "Speaker", "Digital",
++                                  "Playback Volume", "DAC" };
++    (void)selem_name;
++
++    for (size_t i = 0; i < sizeof(cand) / sizeof(cand[0]); i++) {
++        snd_mixer_selem_id_t *csid;
++        snd_mixer_selem_id_alloca(&csid);
++        snd_mixer_selem_id_set_index(csid, 0);
++        snd_mixer_selem_id_set_name(csid, cand[i]);
++        snd_mixer_elem_t *elem = snd_mixer_find_selem(hdl->mixer_handle, csid);
++        if (elem && snd_mixer_selem_has_playback_volume(elem)) {
++            hdl->mixer_elem = elem;
++            snd_mixer_selem_get_playback_volume_range(elem, &hdl->mixer_min, &hdl->mixer_max);
++            PR_INFO("ALSA mixer setup: %s, range=[%ld, %ld]", cand[i], hdl->mixer_min, hdl->mixer_max);
++            break;
++        }
++    }
+ 
+-    if (hdl->mixer_elem) {
+-        snd_mixer_selem_get_playback_volume_range(hdl->mixer_elem, &hdl->mixer_min, &hdl->mixer_max);
+-        PR_INFO("ALSA mixer setup: %s, range=[%ld, %ld]", selem_name, hdl->mixer_min, hdl->mixer_max);
+-    } else {
+-        PR_WARN("Cannot find mixer element: %s", selem_name);
++    if (NULL == hdl->mixer_elem) {
++        PR_WARN("No usable playback volume mixer element found; volume stays unmanaged");
+     }
+ 
+     return OPRT_OK;
+@@ -374,17 +460,60 @@ static void *__alsa_capture_thread(void *arg)
+             }
+         }
+ 
++        {   /* --- TDD debug: raw capture block probe (first 8 reads) --- */
++            static int __cap_n = 0;
++            if (__cap_n < 8 && frames > 0) {
++                long __al = 0, __ar = 0;
++                snd_pcm_sframes_t __i;
++                const int16_t *__s = (const int16_t *)hdl->capture_buffer;
++                for (__i = 0; __i < frames; __i++) {
++                    int16_t __l = __s[__i * ALSA_CAPTURE_CHANNELS];
++                    int16_t __r = __s[__i * ALSA_CAPTURE_CHANNELS + 1];
++                    __al += (__l < 0) ? -(long)__l : (long)__l;
++                    __ar += (__r < 0) ? -(long)__r : (long)__r;
++                }
++                PR_INFO("[capdbg] frames=%ld L_ma=%ld R_ma=%ld",
++                        (long)frames, __al / frames, __ar / frames);
++                __cap_n++;
++            }
++        }
++        // The hardware stream is ALSA_CAPTURE_CHANNELS wide (shared SAI slot clock)
++        // but the AI pipeline wants MONO.  This board wires the mic into one slot
++        // only, so take the stronger channel per sample (averaging would halve the
++        // level because the other slot is silent).
++        int16_t *mic_mono = NULL;
++        if (frames > 0 && hdl->capture_mono_buffer &&
++            (ALSA_CAPTURE_CHANNELS == 2) && (16 == hdl->cfg.data_bits)) {
++            const int16_t *src_s = (const int16_t *)hdl->capture_buffer;
++            int16_t *dst_s = (int16_t *)hdl->capture_mono_buffer;
++            for (snd_pcm_sframes_t i = 0; i < frames; i++) {
++                int16_t l = src_s[i * 2];
++                int16_t r = src_s[i * 2 + 1];
++                int16_t al = (l < 0) ? (int16_t)-l : l;
++                int16_t ar = (r < 0) ? (int16_t)-r : r;
++                dst_s[i] = (al >= ar) ? l : r;
++            }
++            mic_mono = dst_s;
++        } else if (frames > 0) {
++            mic_mono = (int16_t *)hdl->capture_buffer;
++        }
++
++        __alsa_dump_init();
++        if (__s_dump_cap && mic_mono && frames > 0) {
++            fwrite(mic_mono, 1, (size_t)frames * 2, __s_dump_cap);
++        }
++
+         // Call callback with captured data
+-        if (hdl->mic_cb && frames > 0) {
++        if (hdl->mic_cb && frames > 0 && mic_mono) {
+             uint32_t data_size = frames * hdl->cfg.channels * (hdl->cfg.data_bits / 8);
+-            hdl->mic_cb(TDL_AUDIO_FRAME_FORMAT_PCM, TDL_AUDIO_STATUS_RECEIVING, hdl->capture_buffer, data_size);
++            hdl->mic_cb(TDL_AUDIO_FRAME_FORMAT_PCM, TDL_AUDIO_STATUS_RECEIVING, (uint8_t *)mic_mono, data_size);
+         }
+ 
+         // Feed data to VAD/KWS if registered
+         // ref_buffer contains the reference data (speaker playback) for AEC
+         // If no playback is active, ref_buffer contains zeros
+         if ((__s_vad_feed_cb || __s_kws_feed_cb) && frames > 0) {
+-            int16_t *mic_data = (int16_t *)hdl->capture_buffer;
++            int16_t *mic_data = mic_mono ? mic_mono : (int16_t *)hdl->capture_buffer;
+             int16_t *ref_data = (int16_t *)hdl->ref_buffer;
+             int16_t *out_data = (int16_t *)hdl->out_buffer;
+             
+@@ -467,6 +596,10 @@ static OPERATE_RET __tdd_audio_alsa_open(TDD_AUDIO_HANDLE_T handle, TDL_AUDIO_MI
+             snd_mixer_close(hdl->mixer_handle);
+         }
+         tal_free(hdl->capture_buffer);
++        if (hdl->capture_mono_buffer) {
++            tal_free(hdl->capture_mono_buffer);
++            hdl->capture_mono_buffer = NULL;
++        }
+         return OPRT_COM_ERROR;
+     }
+ 
+@@ -491,9 +624,10 @@ static OPERATE_RET __tdd_audio_alsa_play(TDD_AUDIO_HANDLE_T handle, uint8_t *dat
+         return OPRT_COM_ERROR;
+     }
+ 
+-    // Calculate number of frames
+-    uint32_t frame_size = hdl->cfg.channels * (hdl->cfg.data_bits / 8);
+-    snd_pcm_uframes_t frames = len / frame_size;
++    __alsa_dump_init();
++    if (__s_dump_pb && data && len) {
++        fwrite(data, 1, len, __s_dump_pb);
++    }
+ 
+     // Copy playback data to ref_buffer for AEC reference
+     if (hdl->ref_buffer && hdl->ref_buffer_size > 0) {
+@@ -503,20 +637,78 @@ static OPERATE_RET __tdd_audio_alsa_play(TDD_AUDIO_HANDLE_T handle, uint8_t *dat
+         pthread_mutex_unlock(&hdl->ref_buffer_mutex);
+     }
+ 
+-    // Write audio frames
+-    snd_pcm_sframes_t written = snd_pcm_writei(hdl->playback_handle, data, frames);
+-    if (written < 0) {
+-        // Handle buffer underrun
+-        if (written == -EPIPE) {
+-            PR_WARN("ALSA playback underrun occurred");
+-            snd_pcm_prepare(hdl->playback_handle);
+-            written = snd_pcm_writei(hdl->playback_handle, data, frames);
++    // The playback stream is STEREO (see ALSA_PLAYBACK_CHANNELS) while the AI audio
++    // pipeline feeds MONO PCM: duplicate every sample into L/R before writing.
++    const uint8_t *out_data = data;
++    snd_pcm_uframes_t frames;
++
++    if ((2 == ALSA_PLAYBACK_CHANNELS) && (16 == hdl->cfg.data_bits)) {
++        snd_pcm_uframes_t mono_frames = len / 2;
++        if (mono_frames > 0) {
++            uint32_t need = (uint32_t)mono_frames * 4;   /* 2ch x 16bit */
++            if (need > hdl->play_conv_buffer_size) {
++                if (hdl->play_conv_buffer) {
++                    tal_free(hdl->play_conv_buffer);
++                    hdl->play_conv_buffer = NULL;
++                    hdl->play_conv_buffer_size = 0;
++                }
++                hdl->play_conv_buffer = (uint8_t *)tal_malloc(need);
++                if (NULL == hdl->play_conv_buffer) {
++                    PR_ERR("Cannot allocate playback convert buffer (%u)", need);
++                    return OPRT_MALLOC_FAILED;
++                }
++                hdl->play_conv_buffer_size = need;
++            }
++            const int16_t *src_s = (const int16_t *)data;
++            int16_t *dst_s = (int16_t *)hdl->play_conv_buffer;
++            for (snd_pcm_uframes_t i = 0; i < mono_frames; i++) {
++                dst_s[i * 2]     = src_s[i];
++                dst_s[i * 2 + 1] = src_s[i];
++            }
++            out_data = hdl->play_conv_buffer;
+         }
++        frames = mono_frames;
++    } else {
++        uint32_t frame_size = ALSA_PLAYBACK_CHANNELS * (hdl->cfg.data_bits / 8);
++        frames = len / frame_size;
++    }
+ 
++    if (0 == frames) {
++        PR_ERR("Play data too short: len=%u", len);
++        return OPRT_COM_ERROR;
++    }
++
++    // Write audio frames, tolerating partial writes and underruns
++    snd_pcm_uframes_t offset = 0;
++    int retries = 0;
++    uint32_t bytes_per_frame = ALSA_PLAYBACK_CHANNELS * (hdl->cfg.data_bits / 8);
++
++    while (offset < frames) {
++        snd_pcm_sframes_t written = snd_pcm_writei(hdl->playback_handle,
++                                                   out_data + (offset * bytes_per_frame),
++                                                   frames - offset);
+         if (written < 0) {
++            if (written == -EPIPE) {
++                PR_WARN("ALSA playback underrun occurred");
++                snd_pcm_prepare(hdl->playback_handle);
++                if (++retries > 3) {
++                    return OPRT_COM_ERROR;
++                }
++                continue;
++            }
++            if (written == -EAGAIN) {
++                continue;
++            }
+             PR_ERR("ALSA playback error: %s", snd_strerror(written));
+             return OPRT_COM_ERROR;
+         }
++        if (0 == written) {
++            if (++retries > 3) {
++                return OPRT_COM_ERROR;
++            }
++            continue;
++        }
++        offset += (snd_pcm_uframes_t)written;
+     }
+ 
+     return rt;
+@@ -631,6 +823,11 @@ static OPERATE_RET __tdd_audio_alsa_close(TDD_AUDIO_HANDLE_T handle)
+         hdl->capture_buffer = NULL;
+     }
+ 
++    if (hdl->capture_mono_buffer) {
++        tal_free(hdl->capture_mono_buffer);
++        hdl->capture_mono_buffer = NULL;
++    }
++
+     if (hdl->ref_buffer) {
+         tal_free(hdl->ref_buffer);
+         hdl->ref_buffer = NULL;
+@@ -641,6 +838,12 @@ static OPERATE_RET __tdd_audio_alsa_close(TDD_AUDIO_HANDLE_T handle)
+         hdl->out_buffer = NULL;
+     }
+ 
++    if (hdl->play_conv_buffer) {
++        tal_free(hdl->play_conv_buffer);
++        hdl->play_conv_buffer = NULL;
++        hdl->play_conv_buffer_size = 0;
++    }
++
+     // Destroy mutex
+     pthread_mutex_destroy(&hdl->ref_buffer_mutex);
+ 

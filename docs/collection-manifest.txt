@@ -1,0 +1,36 @@
+OK    /home/yuxuan/Documents/TuyaOpen/apps/tuya.ai/your_chat_bot/src (已过滤备份/构建产物)
+OK    /home/yuxuan/Documents/TuyaOpen/apps/tuya.ai/your_chat_bot/include (已过滤备份/构建产物)
+OK    /home/yuxuan/Documents/TuyaOpen/apps/tuya.ai/your_chat_bot/config (已过滤备份/构建产物)
+OK    /home/yuxuan/Documents/TuyaOpen/apps/tuya.ai/your_chat_bot/im (已过滤备份/构建产物)
+OK    /home/yuxuan/Documents/TuyaOpen/apps/tuya.ai/your_chat_bot/CMakeLists.txt -> app/CMakeLists.txt
+OK    /home/yuxuan/Documents/TuyaOpen/apps/tuya.ai/your_chat_bot/app_default.config -> app/app_default.config
+OK    /home/yuxuan/Documents/TuyaOpen/apps/tuya.ai/your_chat_bot/run_chatbot.sh -> app/run_chatbot.sh
+OK    /home/yuxuan/Documents/TuyaOpen/apps/tuya.ai/your_chat_bot/README.md -> app/README.md
+OK    /home/yuxuan/Documents/TuyaOpen/apps/tuya.ai/your_chat_bot/README_zh.md -> app/README_zh.md
+OK    /root/ws2812/ws2812/ws2812_drv.c -> driver/ws2812_drv.c
+OK    /root/ws2812/ws2812/ws2812_app.c -> driver/ws2812_app.c
+OK    /root/ws2812/ws2812/ws2812.dts -> driver/ws2812.dts
+OK    /root/ws2812/ws2812/Makefile -> driver/Makefile
+OK    build_ws2812.sh -> driver/
+OK    /usr/local/bin/ws2812d.py -> led/ws2812d.py
+OK    /usr/local/bin/ws2812_wait_dev.sh -> led/ws2812_wait_dev.sh
+OK    /root/arm_actions.py -> arm/arm_actions.py
+OK    /root/arm_do.py -> arm/arm_do.py
+OK    /root/arm_pose_try.py -> arm/arm_pose_try.py
+OK    /root/arm_pose_save.py -> arm/arm_pose_save.py
+OK    /root/vision_interact.py -> vision/vision_interact.py
+OK    /root/greet_logic.py -> vision/greet_logic.py
+OK    /root/gesture/*.py (12 个源文件)
+WARN  /root/gesture 下的 onnx / task 模型未收录（二进制，按 README 说明自行下载）
+OK    /etc/systemd/system/chatbot.service -> systemd/chatbot.service
+OK    /etc/systemd/system/ws2812d.service -> systemd/ws2812d.service
+OK    /etc/systemd/system/vision-greet.service -> systemd/vision-greet.service
+OK    /etc/systemd/system/face-follow.service -> systemd/face-follow.service
+OK    /etc/greet-pose.json -> config/greet-pose.json
+OK    /etc/gesture-map.json -> config/gesture-map.json
+OK    /etc/feishu.json -> config/feishu.json.example (已脱敏)
+OK    tools/ 收敛为 10 个运维脚本（跳过 150+ diag_/test_/patch_ 调试脚本）
+OK    patches/tuyaopen-local-changes.patch (520 行,  5 files changed, 266 insertions(+), 40 deletions(-))
+WARN  tuyadb 存在于板端（257M），已按规则排除，未进 stage
+STAGE_SIZE  11M
+FILE_COUNT  266

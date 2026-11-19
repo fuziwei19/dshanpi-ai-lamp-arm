@@ -1,0 +1,36 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+    compatible = "rockchip,rk3576";
+
+    /* 片段1：禁用 uart4 并释放引脚 */
+    fragment@0 {
+        target = <&uart4>;
+        __overlay__ {
+            status = "disabled";
+            /* 可选：删除引脚配置以彻底释放 GPIO 资源 */
+            /delete-property/ pinctrl-0;
+            /delete-property/ pinctrl-names;
+        };
+    };
+
+    /* 片段2：启用 spi2 并添加 ws2812 设备 */
+    fragment@1 {
+        target = <&spi2>;
+        __overlay__ {
+            status = "okay";
+            pinctrl-names = "default";
+            pinctrl-0 = <&spi2m1_csn0 &spi2m1_pins>;
+            
+            /* 添加 ws2812 子设备 */
+            ws2812: ws2812@0 {
+                compatible = "dshanpi-a1,ws2812";
+                spi-max-frequency = <6670000>;
+                leds,number = <15>;
+                reg = <0>;          /* 对应 CS0 */
+                status = "okay";
+            };
+        };
+    };
+};

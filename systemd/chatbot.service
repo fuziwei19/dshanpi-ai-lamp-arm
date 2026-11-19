@@ -1,0 +1,25 @@
+[Unit]
+Description=your_chat_bot (TuyaOpen: AI chat + Feishu IM + vision + emotion lamp)
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Environment=HOME=/root
+# KV 数据库是相对 cwd 的，必须在 app 目录里跑
+WorkingDirectory=/home/yuxuan/Documents/TuyaOpen/apps/tuya.ai/your_chat_bot
+
+# 先清残留（开机时一般没有；重启时有）。前面的 "-" 表示失败也继续
+ExecStartPre=-/bin/sh /root/stop_chatbot.sh
+ExecStart=/home/yuxuan/Documents/TuyaOpen/apps/tuya.ai/your_chat_bot/run_chatbot.sh
+
+# 网络/云端没就绪时 app 会自己重试，这里再兜一层：挂了就拉起来
+Restart=always
+RestartSec=10
+
+StandardOutput=append:/var/log/xiaozhi-linux/chatbot.log
+StandardError=append:/var/log/xiaozhi-linux/chatbot.log
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,25 @@
+[Unit]
+Description=YOLOv8-Pose face follow for SO-101 arm (voice controlled, on demand)
+Documentation=file:///root/yolov8pose_head_follow_so101.py
+After=local-fs.target
+# 注意：本单元故意不 enable、不提供 [Install] 段 ->
+#       绝不开机自启（机械臂自动运动会伤人），只能由小智语音 / systemctl start 主动触发。
+# 禁止自动重启：崩溃后反复重试会让机械臂反复乱动，非常危险。
+StartLimitIntervalSec=0
+
+[Service]
+Type=exec
+WorkingDirectory=/root
+Environment=PYTHONUNBUFFERED=1
+Environment=OPENCV_LOG_LEVEL=ERROR
+Environment=PYTHONFAULTHANDLER=1
+ExecStartPre=/root/face_follow_precheck.sh
+ExecStart=/root/miniconda3/envs/lerobot/bin/python /root/face_follow_launch.py
+# 关键：用 SIGINT 停止 = 等价于终端 Ctrl+C ->
+# 触发脚本的 KeyboardInterrupt 分支 -> 平滑移动到 PARK 收纳点 + 释放力矩
+KillSignal=SIGINT
+KillMode=mixed
+TimeoutStopSec=40
+Restart=no
+StandardOutput=append:/var/log/xiaozhi-linux/face_follow.log
+StandardError=append:/var/log/xiaozhi-linux/face_follow.log
